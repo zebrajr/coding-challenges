@@ -1,15 +1,22 @@
 package main
 
 import (
-    "time"
 	"bufio"
 	"log"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
 
 var puzzle_file_name = "puzzle_input.txt"
+
+// variables to handle & control multiple threads
+var sum_mutex sync.Mutex
+var final_sum_global = 0 
+var wg sync.WaitGroup
+
 
 type equation struct {
     target_number int
@@ -100,13 +107,44 @@ func is_equation_possible(eq equation, operations []string) bool {
     return false
 }
 
+func async_is_equation_possible(eq equation, operations []string) bool {
+    // inform the work group once the task is done
+    defer wg.Done()
+    for _, ops := range operations {
+        current_result := 0
+        for ido, op := range ops {
+            if ido == 0 {
+                current_result = eq.numbers[ido]
+            }
+            if string(op) == "+" {
+                current_result = current_result + eq.numbers[ido + 1]
+            }
+            if string(op) == "*" {
+                current_result = current_result * eq.numbers[ido + 1]
+            }
+            if string(op) == "|" {
+                temp_a := strconv.Itoa(current_result)
+                temp_b := strconv.Itoa(eq.numbers[ido + 1])
+                result_string := temp_a + temp_b
+                current_result, _ = strconv.Atoi(result_string)
+            }
+        }
+        //log.Println("Wanted vs Got: ", eq.target_number, current_result)
+        if eq.target_number == current_result {
+            sum_mutex.Lock()
+            final_sum_global += eq.target_number
+            sum_mutex.Unlock()
+        }
+    }
+    return false
+}
 
 func time_track(start time.Time, name string){
     elapsed := time.Since(start)
     log.Printf("%s took %s", name, elapsed)
 }
 
-func main() {
+func main_normal() {
     defer time_track(time.Now(), "main")
     equations := load_puzzle_from_file(puzzle_file_name) 
     final_result := 0
@@ -135,4 +173,33 @@ func main() {
         }
     }
     log.Println("Final Result - Part B: ", final_result)
+}
+
+func main(){
+    defer time_track(time.Now(), "main")
+    equations := load_puzzle_from_file(puzzle_file_name) 
+    possible_operations := []string { "+" ,"*" }
+    for _, eq := range equations {
+        possible_operations := calculate_all_operations_for_equation(eq, possible_operations)
+        
+        wg.Add(1)
+        go async_is_equation_possible(eq, possible_operations)
+    }
+    wg.Wait()
+    log.Println("Final Result - Part A: ", final_sum_global)
+
+    final_sum_global = 0
+    possible_operations = []string { "+", "*", "|" }
+    for _, eq := range equations {
+        operations_list := calculate_all_operations_for_equation(eq, possible_operations)
+
+        // inform work group about new goroutine
+        wg.Add(1)
+        go async_is_equation_possible(eq, operations_list)
+
+    }
+    // wait until all tasks are finished
+    wg.Wait()
+    log.Println("Final Result - Part B: ", final_sum_global)
+
 }
