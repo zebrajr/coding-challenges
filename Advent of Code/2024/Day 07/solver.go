@@ -1,8 +1,9 @@
 package main
 
 import (
+    "time"
 	"bufio"
-	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -44,14 +45,14 @@ func load_puzzle_from_file(target_file_name string) []equation{
     return equations_list
 }
 
-func generate_combinations(numbers int) []string{
+func generate_combinations(numbers int, operators []string) []string{
     if numbers == 0 {
         return []string {""}
     }
 
     combinations := []string{}
-    for _, c := range []string {"+", "*"}{
-        for _, prev := range generate_combinations(numbers -1){
+    for _, c := range operators{
+        for _, prev := range generate_combinations(numbers -1, operators){
             combinations = append(combinations, prev + string(c))
         }
     }
@@ -59,11 +60,12 @@ func generate_combinations(numbers int) []string{
     return combinations
 }
 
-func calculate_all_operations_for_equation(eq equation) []string {
+func calculate_all_operations_for_equation(eq equation, operations []string) []string {
     var final_list []string
-    combinations := generate_combinations(len(eq.numbers) - 1)
+    list_combinations := generate_combinations(len(eq.numbers) - 1, operations)
 
-    for _, c := range combinations {
+    for _, c := range list_combinations {
+        //log.Println(list_combinations, idx, c)
         final_list = append(final_list, c)
     }
 
@@ -83,8 +85,14 @@ func is_equation_possible(eq equation, operations []string) bool {
             if string(op) == "*" {
                 current_result = current_result * eq.numbers[ido + 1]
             }
+            if string(op) == "|" {
+                temp_a := strconv.Itoa(current_result)
+                temp_b := strconv.Itoa(eq.numbers[ido + 1])
+                result_string := temp_a + temp_b
+                current_result, _ = strconv.Atoi(result_string)
+            }
         }
-        //fmt.Println("Wanted vs Got: ", eq.target_number, current_result)
+        //log.Println("Wanted vs Got: ", eq.target_number, current_result)
         if eq.target_number == current_result {
             return true
         }
@@ -92,14 +100,39 @@ func is_equation_possible(eq equation, operations []string) bool {
     return false
 }
 
+
+func time_track(start time.Time, name string){
+    elapsed := time.Since(start)
+    log.Printf("%s took %s", name, elapsed)
+}
+
 func main() {
+    defer time_track(time.Now(), "main")
     equations := load_puzzle_from_file(puzzle_file_name) 
     final_result := 0
+    possible_operations := []string {"+", "*"}
     for _, eq := range equations {
-        operations_list := calculate_all_operations_for_equation(eq)
+        operations_list := calculate_all_operations_for_equation(eq, possible_operations)
         if is_equation_possible(eq, operations_list){
             final_result += eq.target_number
         }
     }
-    fmt.Println("Final Result: ", final_result)
+    log.Println("Final Result - Part A: ", final_result)
+
+    // this is WRONG
+    // the question clearly asks to use "||" as the operators
+    // I don't want to refactor the code base to handle 2 characters for the operations
+    //
+    // the fix would be to instead of returning an array of strings eg: [ +*|| *+|| ]
+    // to instead return a string of strings [ [+ * || ] [ * + || ] ]
+    // which would then allow for safe iteration 
+    final_result = 0
+    possible_operations = []string {"+", "*", "|"}
+    for _, eq := range equations {
+        operations_list := calculate_all_operations_for_equation(eq, possible_operations)
+        if is_equation_possible(eq, operations_list){
+            final_result += eq.target_number
+        }
+    }
+    log.Println("Final Result - Part B: ", final_result)
 }
